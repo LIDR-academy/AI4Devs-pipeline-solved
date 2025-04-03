@@ -56,4 +56,32 @@ terraform plan
 terraform apply
 ```
 
-Recuerda ajustar el valor de la variable `admin_ip` en `variables.tf` con tu dirección IP real para restringir adecuadamente el acceso SSH. 
+Recuerda ajustar el valor de la variable `admin_ip` en `variables.tf` con tu dirección IP real para restringir adecuadamente el acceso SSH.
+
+## Solicitud adicional del Usuario
+
+Ahora necesitamos añadir un bucket para almacenar los posibles curriculums que los usuarios suban en el futuro.
+
+## Respuesta del Asistente
+
+He añadido un bucket S3 para almacenar currículums de los usuarios, con las siguientes características:
+
+1. Creé un nuevo archivo `storage.tf` para definir los recursos de almacenamiento
+2. El bucket tiene un nombre que comienza con "lt-" (lt-recruiting-resumes-xxx) para que sea accesible desde el rol ya configurado
+3. Agregué un sufijo aleatorio al nombre del bucket para garantizar su unicidad global
+4. Configuré bloqueo de acceso público para mayor seguridad
+5. Implementé cifrado del lado del servidor con AES256
+6. Configuré reglas de ciclo de vida para archivar automáticamente currículums antiguos:
+   - Después de 90 días, se mueven a almacenamiento STANDARD_IA (acceso infrecuente)
+   - Después de 1 año, se archivan en GLACIER para reducir costos
+7. Configuré reglas CORS para permitir operaciones desde la aplicación web
+8. Actualicé los outputs para incluir el nombre y ARN del bucket
+
+También actualicé el archivo `main.tf` para incluir el proveedor random necesario para generar el sufijo único del bucket.
+
+Para aplicar estos cambios, ejecuta nuevamente:
+```
+terraform init
+terraform plan
+terraform apply
+``` 

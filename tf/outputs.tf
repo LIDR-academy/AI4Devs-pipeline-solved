@@ -28,4 +28,14 @@ output "service_account_secret_key" {
   description = "Secret access key for the service account"
   value       = aws_iam_access_key.service_account_key.secret
   sensitive   = true
+}
+
+output "resumes_bucket_name" {
+  description = "Name of the S3 bucket for storing resumes"
+  value       = aws_s3_bucket.lt_resumes_bucket.bucket
+}
+
+output "resumes_bucket_arn" {
+  description = "ARN of the S3 bucket for storing resumes"
+  value       = aws_s3_bucket.lt_resumes_bucket.arn
 } 
