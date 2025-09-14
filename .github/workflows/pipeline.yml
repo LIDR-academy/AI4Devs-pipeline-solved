@@ -74,45 +74,23 @@ jobs:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
           S3_BUCKET: ${{ secrets.S3_BUCKET }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
           echo "Deploying to EC2 host..."
-          ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
-            export AWS_REGION=${AWS_REGION}
-            # Install Nginx if not already installed
-            if ! command -v nginx &> /dev/null; then
-              if command -v yum &> /dev/null; then
-                sudo yum update -y
-                sudo yum install -y nginx
-              elif command -v apt-get &> /dev/null; then
-                sudo apt-get update -y
-                sudo apt-get install -y nginx
-              fi
-            fi
-
-            # Install Node if not present
-            if ! command -v node &> /dev/null; then
-              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-              source ~/.bashrc
-              nvm install --lts
-            fi
-
-            sudo mkdir -p /etc/nginx/conf.d
-            echo "server {\n  listen 80;\n  server_name ${EC2_HOST};\n  location / { proxy_pass http://localhost:8080; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }\n}" | sudo tee /etc/nginx/conf.d/app.conf > /dev/null
-            sudo systemctl restart nginx || true
-
+          S3_BUCKET=${S3_BUCKET:-cursolidr}
+          ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << EOF
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            
             # Prepare app directory
-            mkdir -p /home/ec2-user/backend
-            cd /home/ec2-user/backend
+            mkdir -p /home/ubuntu/backend
+            cd /home/ubuntu/backend
 
             # Download code from S3
-            aws s3 cp s3://$S3_BUCKET/backend/ . --recursive
+            aws s3 cp s3://${S3_BUCKET}/backend/ . --recursive
 
             # Install dependencies, build and start with PM2
-            if ! command -v pm2 &> /dev/null; then npm install -g pm2; fi
             npm install || true
             npm run build || true
             pm2 stop my-app || true
             pm2 start npm --name my-app -- start -- --port 8080
-            exit
           EOF
