@@ -16,8 +16,8 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: '16'
-          cache: 'npm'
+          node-version: "16"
+          cache: "npm"
 
       - name: Install dependencies (backend)
         working-directory: backend
