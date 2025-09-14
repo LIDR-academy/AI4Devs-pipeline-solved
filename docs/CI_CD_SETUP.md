@@ -39,8 +39,9 @@ Policy JSON (reemplaza el nombre del bucket):
 - `AWS_ACCESS_ID` = Access Key ID del usuario IAM
 - `AWS_ACCESS_KEY` = Secret Access Key
 - `S3_BUCKET` = nombre del bucket S3 a usar (por defecto `cursolidr` si no defines el secreto)
-- `EC2_INSTANCE` = IP pública o DNS de la EC2
-- `EC2_SSH_PRIVATE_KEY` = Contenido de tu private key PEM
+- `EC2_HOST` = IP pública o DNS de la EC2
+- `EC2_USER` = usuario SSH en la EC2 (ej.: `ec2-user` o `ubuntu`)
+- `EC2_SSH_KEY` = Contenido de tu private key PEM (subir como secreto en GitHub)
 - `AWS_REGION` = `us-east-1` (o la que uses)
 
 4) Preparar EC2

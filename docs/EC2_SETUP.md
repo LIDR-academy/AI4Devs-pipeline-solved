@@ -15,18 +15,20 @@ Supported OS: Amazon Linux 2 (ec2-user) and Ubuntu (ubuntu)
 On your local machine:
 
 ```bash
-ssh-keygen -f deploy_key -N ""    # if you need a new key
-ssh-copy-id -i deploy_key.pub ec2-user@EC2_PUBLIC_IP
+# generate a keypair (if needed)
+ssh-keygen -f deploy_key -N ""
+# copy public key to the instance (replace EC2_HOST and EC2_USER)
+ssh-copy-id -i deploy_key.pub ${EC2_USER}@${EC2_HOST}
 ```
 
-Or manually add the public key to `/home/ec2-user/.ssh/authorized_keys`.
+Or manually add the public key to `/home/${EC2_USER}/.ssh/authorized_keys`.
 
 3) Run bootstrap script (recommended)
 
-From your local machine (replace key and IP):
+From your local machine (replace key and host):
 
 ```bash
-cat scripts/bootstrap_ec2.sh | ssh -i path/to/deploy_key ec2-user@EC2_PUBLIC_IP 'bash -s'
+cat scripts/bootstrap_ec2.sh | ssh -i path/to/deploy_key ${EC2_USER}@${EC2_HOST} 'bash -s'
 ```
 
 This script installs nginx, Node (via nvm), pm2 and AWS CLI.
@@ -34,7 +36,7 @@ This script installs nginx, Node (via nvm), pm2 and AWS CLI.
 4) Verify nginx and node
 
 ```bash
-ssh -i path/to/deploy_key ec2-user@EC2_PUBLIC_IP
+ssh -i path/to/deploy_key ${EC2_USER}@${EC2_HOST}
 sudo systemctl status nginx
 node -v
 pm2 -v
@@ -46,4 +48,4 @@ The GitHub Actions workflow uploads the code to S3; the EC2 will download using 
 
 6) User note
 
-- The workflow assumes the remote user is `ec2-user`. If your AMI uses `ubuntu` change the user in the workflow and docs.
+- The workflow uses the secret `EC2_USER` to determine the SSH user (commonly `ec2-user` for Amazon Linux or `ubuntu` for Ubuntu). If your AMI uses `ubuntu` set `EC2_USER=ubuntu` in the repo secrets.

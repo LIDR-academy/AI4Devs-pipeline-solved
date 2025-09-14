@@ -62,21 +62,22 @@ jobs:
       - name: Add EC2 Host Key
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_INSTANCE }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
       - name: Load SSH key and deploy to EC2
         uses: webfactory/ssh-agent@v0.8.1
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
       - name: Deploy to EC2 (via ssh)
         env:
-          EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
           S3_BUCKET: ${{ secrets.S3_BUCKET }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          echo "Deploying to EC2 instance..."
-          ssh -o StrictHostKeyChecking=no ec2-user@${EC2_INSTANCE} << 'EOF'
+          echo "Deploying to EC2 host..."
+          ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
             export AWS_REGION=${AWS_REGION}
             # Install Nginx if not already installed
             if ! command -v nginx &> /dev/null; then
@@ -97,7 +98,7 @@ jobs:
             fi
 
             sudo mkdir -p /etc/nginx/conf.d
-            echo "server {\n  listen 80;\n  server_name ${EC2_INSTANCE};\n  location / { proxy_pass http://localhost:8080; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }\n}" | sudo tee /etc/nginx/conf.d/app.conf > /dev/null
+            echo "server {\n  listen 80;\n  server_name ${EC2_HOST};\n  location / { proxy_pass http://localhost:8080; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }\n}" | sudo tee /etc/nginx/conf.d/app.conf > /dev/null
             sudo systemctl restart nginx || true
 
             # Prepare app directory
