@@ -1,0 +1,15 @@
+name: Test Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Echo test
+        run: echo "Pipeline test working"

@@ -1,3 +1,4 @@
+**gpt-5-mini**
 **Prompt 1**
 
 Eres un Senior DevSecOps Engineer y se te ha solicitado realizar un pipeline de CI/CD para la compañía. La estructura del pipeline debe seguir las siguientes especificaciones:
@@ -32,6 +33,7 @@ Dentro del job deploy, incluye los siguientes pasos:
 
 ** Prompt 2**
 Puedes hacer los siguientes cambios basado en buenas practicas?
-  - Configura Nginx como proxy inverso para el backend que esta corriendo en el puerto 8080 y  disponibilizalo en el puerto 80.
-  - Ejecuta en segundo plano el backend ya que esta quedandose corriendo indefinidamente.
-  - Los tests estan fallando, debes esperar a que la base de datos, frontend y backend estén listos para que Cypress pueda ejecutar los test.
+
+- Configura Nginx como proxy inverso para el backend que esta corriendo en el puerto 8080 y disponibilizalo en el puerto 80.
+- Ejecuta en segundo plano el backend ya que esta quedandose corriendo indefinidamente.
+- Los tests estan fallando, debes esperar a que la base de datos, frontend y backend estén listos para que Cypress pueda ejecutar los test.

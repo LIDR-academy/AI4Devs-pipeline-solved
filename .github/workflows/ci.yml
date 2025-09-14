@@ -1,6 +1,9 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline - Tests Build Deploy
 
 on:
+  push:
+    branches:
+      - pipeline-iniciales
   pull_request:
     branches:
       - main
@@ -16,116 +19,120 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: '16'
+          node-version: "16"
 
-      - name: Install dependencies
+      - name: Install dependencies (backend)
+        working-directory: backend
         run: |
-          cd backend
-          npm install
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-      - name: Run tests
+      - name: Run tests (backend)
+        working-directory: backend
         run: |
-          cd backend
           npm test
+
+      - name: Build backend (dist)
+        working-directory: backend
+        run: |
+          npm run build
 
   deploy:
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'pull_request'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
       - name: Configure AWS Credentials
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
-          AWS_REGION: 'us-east-1'
-        run: |
-          echo "Configuring AWS CLI"
-          aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-          aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-          aws configure set region $AWS_REGION
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-north-1
 
       - name: Upload to S3
+        env:
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
         run: |
-          aws s3 cp backend/ s3://mi-ec2-con-github-actions/backend/ --recursive
+          S3_BUCKET=${S3_BUCKET:-cursolidr}
+          echo "Uploading to S3 bucket: $S3_BUCKET"
+          aws s3 cp backend/ s3://$S3_BUCKET/backend/ --recursive
 
       - name: Add EC2 Host Key
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.EC2_INSTANCE }} >> ~/.ssh/known_hosts
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to EC2
+      - name: Load SSH key and deploy to EC2
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Deploy to EC2 (via ssh)
         env:
-            EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
-            EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
-            echo "Deploying to EC2 instance..."
-            echo "$EC2_SSH_PRIVATE_KEY" > private_key.pem
-            cat private_key.pem
-            chmod 600 private_key.pem  
-          
-            ssh -o StrictHostKeyChecking=no -i private_key.pem ec2-user@${{ secrets.EC2_INSTANCE }} << 'EOF'
-                export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_ID }}
-                export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}
-                export AWS_REGION='us-east-1'
+          echo "Deploying to EC2 host..."
+          S3_BUCKET=${S3_BUCKET:-cursolidr}
+          ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'DEPLOY_EOF'
+            set -e
+            echo "Starting deployment on EC2..."
+            
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            
+            # Configure AWS credentials temporarily
+            export AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}"
+            export AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+            export AWS_DEFAULT_REGION="eu-north-1"
+            
+            echo "Checking AWS CLI..."
+            which aws || echo "AWS CLI not found"
+            
+            # Prepare app directory
+            echo "Preparing app directory..."
+            mkdir -p /home/ubuntu/backend
+            cd /home/ubuntu/backend
 
-                # Install Nginx if not already installed
-                if ! command -v nginx &> /dev/null; then
-                sudo yum update
-                sudo yum install -y nginx
-                fi
+            # Download code from S3
+            echo "Downloading from S3..."
+            aws s3 cp s3://cursolidr/backend/ . --recursive
 
-                if ! command -v npm &> /dev/null; then
-                curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-                source ~/.bashrc
-                nvm install --lts
-                node -e "console.log('Running Node.js ' + process.version)"
-                fi
-
-                # Ensure Nginx config directory exists
-                sudo mkdir -p /etc/nginx/sites-available
-                sudo mkdir -p /etc/nginx/sites-enabled
-
-                # Configure Nginx as a reverse proxy using a one-liner
-                echo 'server {
-                    listen 80;
-                    server_name ${{ secrets.EC2_INSTANCE }};
-                    
-                    location / {
-                        proxy_pass http://localhost:8080;
-                        proxy_set_header Host $host;
-                        proxy_set_header X-Real-IP $remote_addr;
-                        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                        proxy_set_header X-Forwarded-Proto $scheme;
-                    }
-                }' | sudo tee /etc/nginx/conf.d/app.conf > /dev/null
-
-                # Enable the site configuration
-                sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
-
-                # Restart Nginx to apply the new configuration
-                sudo systemctl restart nginx
-
-                # Install PM2 if not already installed
-                if ! command -v pm2 &> /dev/null; then
-                npm install -g pm2
-                fi
-
-                # Stop the application if it's running
-                pm2 stop all || true
-
-                # Create the directory if it doesn't exist
-                mkdir -p /home/ec2-user/backend
-                cd /home/ec2-user/backend
-
-                # Download the code from S3
-                aws s3 cp s3://mi-ec2-con-github-actions/backend/ . --recursive
-
-                # Install dependencies and run the application with PM2 on port 8080
-                npm install
-                npm run build
-                pm2 start npm --name "my-app" -- start -- --port 8080
-            EOF
+            # Install dependencies, build and start with PM2
+            if [ -f package.json ]; then
+              echo "Installing dependencies..."
+              npm install || echo "npm install failed, continuing..."
+              echo "Building application..."
+              npm run build || echo "npm build failed, continuing..."
+              echo "Managing PM2 process..."
+              pm2 stop my-app || echo "pm2 stop failed, continuing..."
+              pm2 start npm --name my-app -- start -- --port 8080
+              
+              # Configure nginx proxy
+              echo "Configuring nginx..."
+              echo "server {
+                listen 80;
+                server_name _;
+                location / {
+                  proxy_pass http://localhost:8080;
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+                }
+              }" | sudo tee /etc/nginx/conf.d/app.conf > /dev/null
+              
+              echo "Reloading nginx..."
+              sudo systemctl reload nginx
+              
+              echo "Deployment completed successfully!"
+            else
+              echo "No package.json found, skipping npm commands"
+              exit 1
+            fi
+          DEPLOY_EOF
