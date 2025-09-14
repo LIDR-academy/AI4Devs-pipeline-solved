@@ -103,19 +103,19 @@ jobs:
               pm2 start npm --name my-app -- start -- --port 8080
               
               # Configure nginx proxy
-              sudo bash -c 'cat > /etc/nginx/conf.d/app.conf << NGINXEOF
+              sudo tee /etc/nginx/conf.d/app.conf > /dev/null << 'NGINXEOF'
 server {
   listen 80;
-  server_name ${EC2_HOST};
+  server_name _;
   location / {
     proxy_pass http://localhost:8080;
-    proxy_set_header Host \$host;
-    proxy_set_header X-Real-IP \$remote_addr;
-    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
   }
 }
-NGINXEOF'
+NGINXEOF
               sudo systemctl reload nginx
             fi
           EOF
