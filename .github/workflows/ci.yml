@@ -17,16 +17,22 @@ jobs:
         uses: actions/setup-node@v2
         with:
           node-version: '16'
+          cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install dependencies (backend)
+        working-directory: backend
         run: |
-          cd backend
-          npm install
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-      - name: Run tests
+      - name: Run tests (backend)
+        working-directory: backend
         run: |
-          cd backend
           npm test
+
+      - name: Build backend (dist)
+        working-directory: backend
+        run: |
+          npm run build
 
   deploy:
     runs-on: ubuntu-latest
@@ -38,15 +44,11 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Configure AWS Credentials
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_ACCESS_KEY }}
-          AWS_REGION: 'us-east-1'
-        run: |
-          echo "Configuring AWS CLI"
-          aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
-          aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
-          aws configure set region $AWS_REGION
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Upload to S3
         env:
@@ -62,76 +64,54 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_INSTANCE }} >> ~/.ssh/known_hosts
 
-    - name: Deploy to EC2
-    env:
-      EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
-      EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-      S3_BUCKET: ${{ secrets.S3_BUCKET }}
-    run: |
-      echo "Deploying to EC2 instance..."
-      # write private key to file but do not print it to logs
-      printf "%s" "$EC2_SSH_PRIVATE_KEY" > private_key.pem
-      chmod 600 private_key.pem
+      - name: Load SSH key and deploy to EC2
+        uses: webfactory/ssh-agent@v0.8.1
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
 
-      ssh -o StrictHostKeyChecking=no -i private_key.pem ec2-user@${{ secrets.EC2_INSTANCE }} << 'EOF'
-                export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_ID }}
-                export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}
-                export AWS_REGION='us-east-1'
-
-                # Install Nginx if not already installed
-                if ! command -v nginx &> /dev/null; then
-                sudo yum update
+      - name: Deploy to EC2 (via ssh)
+        env:
+          EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+        run: |
+          echo "Deploying to EC2 instance..."
+          ssh -o StrictHostKeyChecking=no ec2-user@${EC2_INSTANCE} << 'EOF'
+            export AWS_REGION=${AWS_REGION}
+            # Install Nginx if not already installed
+            if ! command -v nginx &> /dev/null; then
+              if command -v yum &> /dev/null; then
+                sudo yum update -y
                 sudo yum install -y nginx
-                fi
+              elif command -v apt-get &> /dev/null; then
+                sudo apt-get update -y
+                sudo apt-get install -y nginx
+              fi
+            fi
 
-                if ! command -v npm &> /dev/null; then
-                curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-                source ~/.bashrc
-                nvm install --lts
-                node -e "console.log('Running Node.js ' + process.version)"
-                fi
+            # Install Node if not present
+            if ! command -v node &> /dev/null; then
+              curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+              source ~/.bashrc
+              nvm install --lts
+            fi
 
-                # Ensure Nginx config directory exists
-                sudo mkdir -p /etc/nginx/sites-available
-                sudo mkdir -p /etc/nginx/sites-enabled
+            sudo mkdir -p /etc/nginx/conf.d
+            echo "server {\n  listen 80;\n  server_name ${EC2_INSTANCE};\n  location / { proxy_pass http://localhost:8080; proxy_set_header Host $host; proxy_set_header X-Real-IP $remote_addr; proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for; proxy_set_header X-Forwarded-Proto $scheme; }\n}" | sudo tee /etc/nginx/conf.d/app.conf > /dev/null
+            sudo systemctl restart nginx || true
 
-                # Configure Nginx as a reverse proxy using a one-liner
-                echo 'server {
-                    listen 80;
-                    server_name ${{ secrets.EC2_INSTANCE }};
-                    
-                    location / {
-                        proxy_pass http://localhost:8080;
-                        proxy_set_header Host $host;
-                        proxy_set_header X-Real-IP $remote_addr;
-                        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                        proxy_set_header X-Forwarded-Proto $scheme;
-                    }
-                }' | sudo tee /etc/nginx/conf.d/app.conf > /dev/null
+            # Prepare app directory
+            mkdir -p /home/ec2-user/backend
+            cd /home/ec2-user/backend
 
-                # Enable the site configuration
-                sudo ln -sf /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+            # Download code from S3
+            aws s3 cp s3://$S3_BUCKET/backend/ . --recursive
 
-                # Restart Nginx to apply the new configuration
-                sudo systemctl restart nginx
-
-                # Install PM2 if not already installed
-                if ! command -v pm2 &> /dev/null; then
-                npm install -g pm2
-                fi
-
-                # Stop the application if it's running
-                pm2 stop all || true
-
-                # Create the directory if it doesn't exist
-                mkdir -p /home/ec2-user/backend
-                cd /home/ec2-user/backend
-
-                # Download the code from S3
-                aws s3 cp s3://$S3_BUCKET/backend/ . --recursive
-
-                # Install dependencies and run the application with PM2 on port 8080
-                npm install
-                npm run build
-                pm2 start npm --name "my-app" -- start -- --port 8080
-            EOF
+            # Install dependencies, build and start with PM2
+            if ! command -v pm2 &> /dev/null; then npm install -g pm2; fi
+            npm install || true
+            npm run build || true
+            pm2 stop my-app || true
+            pm2 start npm --name my-app -- start -- --port 8080
+            exit
+          EOF
