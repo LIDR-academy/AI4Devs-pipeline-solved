@@ -49,25 +49,31 @@ jobs:
           aws configure set region $AWS_REGION
 
       - name: Upload to S3
+        env:
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
         run: |
-          aws s3 cp backend/ s3://mi-ec2-con-github-actions/backend/ --recursive
+          if [ -z "$S3_BUCKET" ]; then
+            echo "S3_BUCKET secret is not set"; exit 1
+          fi
+          aws s3 cp backend/ s3://$S3_BUCKET/backend/ --recursive
 
       - name: Add EC2 Host Key
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.EC2_INSTANCE }} >> ~/.ssh/known_hosts
 
-      - name: Deploy to EC2
-        env:
-            EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
-            EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-        run: |
-            echo "Deploying to EC2 instance..."
-            echo "$EC2_SSH_PRIVATE_KEY" > private_key.pem
-            cat private_key.pem
-            chmod 600 private_key.pem  
-          
-            ssh -o StrictHostKeyChecking=no -i private_key.pem ec2-user@${{ secrets.EC2_INSTANCE }} << 'EOF'
+    - name: Deploy to EC2
+    env:
+      EC2_INSTANCE: ${{ secrets.EC2_INSTANCE }}
+      EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+      S3_BUCKET: ${{ secrets.S3_BUCKET }}
+    run: |
+      echo "Deploying to EC2 instance..."
+      # write private key to file but do not print it to logs
+      printf "%s" "$EC2_SSH_PRIVATE_KEY" > private_key.pem
+      chmod 600 private_key.pem
+
+      ssh -o StrictHostKeyChecking=no -i private_key.pem ec2-user@${{ secrets.EC2_INSTANCE }} << 'EOF'
                 export AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_ID }}
                 export AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_ACCESS_KEY }}
                 export AWS_REGION='us-east-1'
@@ -122,7 +128,7 @@ jobs:
                 cd /home/ec2-user/backend
 
                 # Download the code from S3
-                aws s3 cp s3://mi-ec2-con-github-actions/backend/ . --recursive
+                aws s3 cp s3://$S3_BUCKET/backend/ . --recursive
 
                 # Install dependencies and run the application with PM2 on port 8080
                 npm install
