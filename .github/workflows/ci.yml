@@ -1,6 +1,9 @@
 name: CI/CD Pipeline - Tests Build Deploy
 
 on:
+  push:
+    branches:
+      - pipeline-iniciales
   pull_request:
     branches:
       - main
