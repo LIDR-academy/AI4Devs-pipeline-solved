@@ -46,17 +46,17 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-north-1
 
       - name: Upload to S3
         env:
           S3_BUCKET: ${{ secrets.S3_BUCKET }}
         run: |
-          if [ -z "$S3_BUCKET" ]; then
-            echo "S3_BUCKET secret is not set"; exit 1
-          fi
+          # default to the known bucket name 'cursolidr' if S3_BUCKET secret is not set
+          S3_BUCKET=${S3_BUCKET:-cursolidr}
+          echo "Uploading to S3 bucket: $S3_BUCKET"
           aws s3 cp backend/ s3://$S3_BUCKET/backend/ --recursive
 
       - name: Add EC2 Host Key

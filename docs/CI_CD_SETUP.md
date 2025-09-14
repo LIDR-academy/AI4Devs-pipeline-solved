@@ -8,10 +8,10 @@ Requisitos previos
 
 1) Crear bucket S3
 
-Desde AWS CLI:
+Desde AWS CLI (usar `eu-north-1` - Estocolmo en este caso):
 
 ```powershell
-aws s3 mb s3://mi-backend-artifacts-<tu-nombre>-YYYYMMDD --region us-east-1
+aws s3 mb s3://cursolidr --region eu-north-1
 ```
 
 2) Crear usuario IAM con permisos a S3 (policy mínima)
@@ -38,7 +38,7 @@ Policy JSON (reemplaza el nombre del bucket):
 
 - `AWS_ACCESS_ID` = Access Key ID del usuario IAM
 - `AWS_ACCESS_KEY` = Secret Access Key
-- `S3_BUCKET` = mi-backend-artifacts-<tu-nombre>-YYYYMMDD
+- `S3_BUCKET` = nombre del bucket S3 a usar (por defecto `cursolidr` si no defines el secreto)
 - `EC2_INSTANCE` = IP pública o DNS de la EC2
 - `EC2_SSH_PRIVATE_KEY` = Contenido de tu private key PEM
 - `AWS_REGION` = `us-east-1` (o la que uses)
