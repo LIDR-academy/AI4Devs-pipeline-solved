@@ -1,19 +1,192 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline - Tests Build Deployname: CI/CD Pipeline - Tests Build Deploy
 
-on:
-  pull_request:
-    branches:
-      - main
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
+on:on:
 
-      - name: Set up Node.js
+  pull_request:  pull_request:
+
+    branches:    branches:
+
+      - main      - main
+
+
+
+jobs:jobs:
+
+  build:  build:
+
+    runs-on: ubuntu-latest    runs-on: ubuntu-latest
+
+
+
+    steps:    steps:
+
+      - name: Checkout code      - name: Checkout code
+
+        uses: actions/checkout@v2        uses: actions/checkout@v2
+
+
+
+      - name: Set up Node.js      - name: Set up Node.js
+
+        uses: actions/setup-node@v2        uses: actions/setup-node@v2
+
+        with:        with:
+
+          node-version: "16"          node-version: "16"
+
+          cache: "npm"          cache: "npm"
+
+
+
+      - name: Install dependencies (backend)      - name: Install dependencies (backend)
+
+        working-directory: backend        working-directory: backend
+
+        run: |        run: |
+
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+
+
+      - name: Run tests (backend)      - name: Run tests (backend)
+
+        working-directory: backend        working-directory: backend
+
+        run: |        run: |
+
+          npm test          npm test
+
+
+
+      - name: Build backend (dist)      - name: Build backend (dist)
+
+        working-directory: backend        working-directory: backend
+
+        run: |        run: |
+
+          npm run build          npm run build
+
+
+
+  deploy:  deploy:
+
+    runs-on: ubuntu-latest    runs-on: ubuntu-latest
+
+    needs: build    needs: build
+
+    if: github.event_name == 'pull_request'    if: github.event_name == 'pull_request'
+
+
+
+    steps:    steps:
+
+      - name: Checkout code      - name: Checkout code
+
+        uses: actions/checkout@v2        uses: actions/checkout@v2
+
+
+
+      - name: Configure AWS Credentials      - name: Configure AWS Credentials
+
+        uses: aws-actions/configure-aws-credentials@v2        uses: aws-actions/configure-aws-credentials@v2
+
+        with:        with:
+
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+          aws-region: eu-north-1          aws-region: eu-north-1
+
+
+
+      - name: Upload to S3      - name: Upload to S3
+
+        env:        env:
+
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+
+        run: |        run: |
+
+          S3_BUCKET=${S3_BUCKET:-cursolidr}          S3_BUCKET=${S3_BUCKET:-cursolidr}
+
+          echo "Uploading to S3 bucket: $S3_BUCKET"          echo "Uploading to S3 bucket: $S3_BUCKET"
+
+          aws s3 cp backend/ s3://$S3_BUCKET/backend/ --recursive          aws s3 cp backend/ s3://$S3_BUCKET/backend/ --recursive
+
+
+
+      - name: Add EC2 Host Key      - name: Add EC2 Host Key
+
+        run: |        run: |
+
+          mkdir -p ~/.ssh          mkdir -p ~/.ssh
+
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+
+
+      - name: Load SSH key and deploy to EC2      - name: Load SSH key and deploy to EC2
+
+        uses: webfactory/ssh-agent@v0.8.1        uses: webfactory/ssh-agent@v0.8.1
+
+        with:        with:
+
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+
+
+      - name: Deploy to EC2 (via ssh)      - name: Deploy to EC2 (via ssh)
+
+        env:        env:
+
+          EC2_HOST: ${{ secrets.EC2_HOST }}          EC2_HOST: ${{ secrets.EC2_HOST }}
+
+          EC2_USER: ${{ secrets.EC2_USER }}          EC2_USER: ${{ secrets.EC2_USER }}
+
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+
+        run: |        run: |
+
+          echo "Deploying to EC2 host..."          echo "Deploying to EC2 host..."
+
+          S3_BUCKET=${S3_BUCKET:-cursolidr}          S3_BUCKET=${S3_BUCKET:-cursolidr}
+
+          ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << EOF          ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << EOF
+
+            export NVM_DIR="$HOME/.nvm"            export NVM_DIR="$HOME/.nvm"
+
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+                        
+
+            # Prepare app directory            # Prepare app directory
+
+            mkdir -p /home/ubuntu/backend            mkdir -p /home/ubuntu/backend
+
+            cd /home/ubuntu/backend            cd /home/ubuntu/backend
+
+
+
+            # Download code from S3            # Download code from S3
+
+            aws s3 cp s3://${S3_BUCKET}/backend/ . --recursive            aws s3 cp s3://${S3_BUCKET}/backend/ . --recursive
+
+
+
+            # Install dependencies, build and start with PM2            # Install dependencies, build and start with PM2
+
+            npm install || true            npm install || true
+
+            npm run build || true            npm run build || true
+
+            pm2 stop my-app || true            pm2 stop my-app || true
+
+            pm2 start npm --name my-app -- start -- --port 8080            pm2 start npm --name my-app -- start -- --port 8080
+
+          EOF          EOF
         uses: actions/setup-node@v2
         with:
           node-version: "16"
