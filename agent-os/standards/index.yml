@@ -1,0 +1,27 @@
+# Agent OS Standards Index
+
+backend:
+  layered-architecture:
+    description: Structured clean architecture separating HTTP routing, presentation controllers, application services, and domain models
+  validation:
+    description: Service-level request validation using custom regular expressions and basic type checks
+
+cicd:
+  ec2-deployment:
+    description: EC2 server deployment patterns using S3 storage, PM2 process manager, and Nginx reverse proxy
+  local-testing:
+    description: Local CI/CD pipeline execution and testing guidelines using act
+  secrets-security:
+    description: Secure secrets management and logging prevention standards in CI/CD pipelines
+
+database:
+  active-record:
+    description: Active Record model wrappers encapsulating Prisma client queries and business logic
+
+frontend:
+  api-configuration:
+    description: API base URL environment configuration and fallback management
+  component-language:
+    description: TypeScript migration guidelines and props/state explicit type definitions
+  service-layer:
+    description: Unified HTTP service layer isolating API integration from React view components
