@@ -59,3 +59,9 @@
 - **Agente:** orchestrator | **Modelo:** Claude Opus 4.6 (copilot)
 - **Prompt:** Me aparecen estas opciones en el grupo de seguridad de amazon EC2: Crearemos un nuevo grupo de seguridad denominado "launch-wizard-1" con las siguientes reglas: Permitir el tráfico de SSH desde Cualquier lugar 0.0.0.0/0, Permitir el tráfico de HTTPS desde Internet, Permitir el tráfico de HTTP desde Internet. que debo elegir? Por otro lado, elegi ubuntu como instancia, es correcto o modifico a amazon linux 2023? Uso free tier
 - **Resumen:** Se recomendó seleccionar las 3 opciones + agregar puerto 8080 manualmente. Ubuntu es válido. Se actualizó master-plan.md y pipeline.yml para Ubuntu (apt, usuario ubuntu, launch-wizard-1).
+
+## Prompt #11
+- **Fecha/Hora:** 2026-06-16 15:00:43
+- **Agente:** orchestrator | **Modelo:** GPT-5.3-Codex (copilot)
+- **Prompt:** Agrega al gitignore cualquier regla de seghuridad necesaria, incluido el archivo .PEM que está en el directorio pem.
+- **Resumen:** Se añadieron reglas de seguridad en `.gitignore` para secretos y llaves privadas (incluyendo `*.pem`, `*.PEM` y `pem/`), además de patrones de estado/variables sensibles de Terraform.
