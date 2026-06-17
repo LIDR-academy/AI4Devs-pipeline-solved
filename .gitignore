@@ -28,3 +28,24 @@ yarn-error.log*
 .vscode
 
 # .env
+
+# security: local secrets and private keys
+**/.env
+**/.env.*
+!**/.env.example
+**/*.pem
+**/*.PEM
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.jks
+pem/
+**/.aws/
+**/.ssh/
+
+# terraform sensitive state/vars
+**/*.tfvars
+**/*.tfvars.json
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.*
